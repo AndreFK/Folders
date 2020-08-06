@@ -1,41 +1,76 @@
 // FolderOperations.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
-#include <sys/types.h> 
-#include <sys/stat.h> 
-#include <filesystem>
+#include <windows.h>
+#include <tchar.h> 
 #include <iostream>
 #include <string>
+#include <vector>
+
+#define VH(h) (h != INVALID_HANDLE_VALUE)
 
 using namespace std;
-namespace fs = std::filesystem;
 
 void createFolder(string path, string name) {
-	path += "/" + name;
-	wstring sw = wstring(path.begin(), path.end());
-	const wchar_t* pathw = sw.c_str();
-	int check = _wmkdir(pathw);
-	if (check == 0) {
-		cout << " -- Folder Created -- " << endl;
+	path = path + "\\" + name;
+	wstring ws = wstring(path.begin(), path.end());
+	if (!CreateDirectory(ws.c_str(), NULL))
+	{
+		cout << " -- Error Creating Directory -- " << endl;
 	}
-	else {
-		cout << " -- Error Creating Folder -- " << endl;
+	else
+	{
+		cout << " -- Directory Created -- " << endl;
 	}
 }
 
-void deleteFolder(string dir) {
-	int check = fs::remove_all(dir);
-	if (check > 0) {
-		cout << " -- Folder Deleted -- " << endl;
+
+void deleteFolder(string path) {
+	vector<wstring::value_type> doubleNullTerminatedPath;
+	copy(path.begin(), path.end(), back_inserter(doubleNullTerminatedPath));
+	doubleNullTerminatedPath.push_back(L'\0');
+	doubleNullTerminatedPath.push_back(L'\0');
+
+	SHFILEOPSTRUCTW fileOperation;
+	fileOperation.wFunc = FO_DELETE;
+	fileOperation.pFrom = &doubleNullTerminatedPath[0];
+	fileOperation.fFlags = FOF_NO_UI | FOF_NOCONFIRMATION;
+
+	int result = ::SHFileOperationW(&fileOperation);
+	if (result != 0) {
+		cout << " -- Error Deleting Directory -- " << endl;
 	}
 	else {
-		cout << " -- Error Deleting Folder -- " << endl;
+		cout << " -- Directory Deleted -- " << endl;
 	}
 }
 
 void listFolder(string path) {
-	for (const auto& entry : fs::directory_iterator(path)) {
-		string type = entry.is_directory() == 1 ? " -- [ Directory ]" : " -- [ File ]";
-		cout << entry.path().filename() << type << endl;
+	path = path + "\\*";
+	
+	LARGE_INTEGER filesize;
+	int count = 2;
+
+	wstring ws = wstring(path.begin(), path.end());
+	WIN32_FIND_DATA data;
+	HANDLE hFind = FindFirstFile(ws.c_str(), &data);
+	
+	if (VH(hFind)) {
+		do {
+			if (count <= 0) {
+				if (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+				{
+					_tprintf(TEXT("  %s   [ DIRECTORY ]\n"), data.cFileName);
+				}
+				else
+				{
+					filesize.LowPart = data.nFileSizeLow;
+					filesize.HighPart = data.nFileSizeHigh;
+					_tprintf(TEXT("  %s  [ FILE ]  %ld bytes\n"), data.cFileName, filesize.QuadPart);
+				}
+			}
+			count--;
+		}while(FindNextFile(hFind, &data));
+		FindClose(hFind);
 	}
 }
 
